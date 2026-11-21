@@ -14,7 +14,13 @@ import {
   type ReactNode
 } from 'react';
 import { ADMIN_EMAIL, auth, googleProvider } from '../firebase';
-import type { CertificateRecord, Registration, UserProfile } from '../types';
+import type {
+  CertificateRecord,
+  NotificationRecord,
+  Registration,
+  UserProfile,
+  WaitlistEntry
+} from '../types';
 
 interface FirebaseContextValue {
   user: User | null;
@@ -25,10 +31,14 @@ interface FirebaseContextValue {
   profile: UserProfile | null;
   myRegistrations: Registration[];
   myCertificates: CertificateRecord[];
+  myWaitlist: WaitlistEntry[];
+  myNotifications: NotificationRecord[];
+  unreadCount: number;
   authError: string | null;
   signInWithGoogle: () => Promise<void>;
   signOutUser: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  markNotificationRead: (notificationId?: number) => Promise<void>;
   authFetch: (input: string, init?: RequestInit) => Promise<Response>;
 }
 
@@ -67,6 +77,10 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [myRegistrations, setMyRegistrations] = useState<Registration[]>([]);
   const [myCertificates, setMyCertificates] = useState<CertificateRecord[]>([]);
+  const [myWaitlist, setMyWaitlist] = useState<WaitlistEntry[]>([]);
+  const [myNotifications, setMyNotifications] = useState<NotificationRecord[]>(
+    []
+  );
   const [authError, setAuthError] = useState<string | null>(null);
   const idTokenRef = useRef<string | null>(null);
   const signingInRef = useRef(false);
@@ -106,12 +120,16 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
       profile: UserProfile | null;
       registrations: Registration[];
       certificates: CertificateRecord[];
+      waitlist?: WaitlistEntry[];
+      notifications?: NotificationRecord[];
       isAdmin: boolean;
       isOwner: boolean;
     };
     setProfile(data.profile);
-    setMyRegistrations(data.registrations);
-    setMyCertificates(data.certificates);
+    setMyRegistrations(data.registrations || []);
+    setMyCertificates(data.certificates || []);
+    setMyWaitlist(data.waitlist || []);
+    setMyNotifications(data.notifications || []);
 
     const ownerMatch =
       Boolean(activeUser.emailVerified) &&
@@ -126,6 +144,30 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
     }
   }, [loadMe]);
 
+  const markNotificationRead = useCallback(
+    async (notificationId?: number) => {
+      if (!auth.currentUser) return;
+      try {
+        await authFetch('/api/notifications/read', {
+          method: 'POST',
+          body: JSON.stringify(
+            notificationId ? { notificationId } : {}
+          )
+        });
+        setMyNotifications((prev) =>
+          prev.map((n) =>
+            !notificationId || n.id === notificationId
+              ? { ...n, isRead: true }
+              : n
+          )
+        );
+      } catch (err) {
+        console.error('Failed to mark notification read:', err);
+      }
+    },
+    [authFetch]
+  );
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
       setUser(nextUser);
@@ -138,6 +180,8 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
         setProfile(null);
         setMyRegistrations([]);
         setMyCertificates([]);
+        setMyWaitlist([]);
+        setMyNotifications([]);
         setAuthReady(true);
         return;
       }
@@ -180,6 +224,8 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
     await signOut(auth);
   }, []);
 
+  const unreadCount = myNotifications.filter((n) => !n.isRead).length;
+
   return (
     <FirebaseContext.Provider
       value={{
@@ -191,10 +237,14 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
         profile,
         myRegistrations,
         myCertificates,
+        myWaitlist,
+        myNotifications,
+        unreadCount,
         authError,
         signInWithGoogle,
         signOutUser,
         refreshProfile,
+        markNotificationRead,
         authFetch
       }}
     >

@@ -2,5 +2,7 @@
   "name": "SkillConnect",
   "description": "Community workshop registration, attendance tracking, feedback, and certificate management application.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

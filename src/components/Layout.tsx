@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useFirebase } from '../context/FirebaseContext';
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { user, isAdmin, isOwner, signOutUser } = useFirebase();
+  const { user, isAdmin, isOwner, unreadCount, signOutUser } = useFirebase();
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
@@ -35,6 +35,15 @@ export function Layout({ children }: { children: ReactNode }) {
             <Link to="/feedback" onClick={() => setMenuOpen(false)}>
               Feedback
             </Link>
+            {user && unreadCount > 0 && (
+              <Link
+                className="nav-alert-link"
+                to="/register#notifications"
+                onClick={() => setMenuOpen(false)}
+              >
+                Alerts ({unreadCount})
+              </Link>
+            )}
             {isAdmin && (
               <Link to="/admin" onClick={() => setMenuOpen(false)}>
                 Dashboard

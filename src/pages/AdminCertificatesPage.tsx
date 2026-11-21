@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useFirebase } from '../context/FirebaseContext';
 import type { CertificateRecord, Registration } from '../types';
+import { downloadCertificatePdf } from '../utils/certificatePdf';
 
 export function AdminCertificatesPage() {
   const { user, authReady, isAdmin, signInWithGoogle, authFetch } =
@@ -22,10 +23,13 @@ export function AdminCertificatesPage() {
         registrations: Registration[];
         certificates: CertificateRecord[];
       };
-      setRegistrations(data.registrations);
+      const confirmed = data.registrations.filter(
+        (r) => r.status === 'confirmed'
+      );
+      setRegistrations(confirmed);
       setIssued(data.certificates);
-      if (!selectedRegId && data.registrations.length > 0) {
-        setSelectedRegId(String(data.registrations[0].id));
+      if (!selectedRegId && confirmed.length > 0) {
+        setSelectedRegId(String(confirmed[0].id));
       }
     } catch (err) {
       setErrorMsg(
@@ -118,6 +122,11 @@ export function AdminCertificatesPage() {
         <div className="split">
           <div className="form-card">
             <h2>Issue certificate</h2>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Certificates are automatically issued as soon as a participant is
+              marked present via QR scan or roster check-in. Use this form to
+              manually issue any pending certificate.
+            </p>
             {errorMsg && <div className="alert error">{errorMsg}</div>}
             {successMsg && <div className="alert success">{successMsg}</div>}
             <form onSubmit={(e) => void handleIssue(e)}>
@@ -146,25 +155,43 @@ export function AdminCertificatesPage() {
           </div>
 
           <div className="panel">
-            <h2>Issued certificates</h2>
+            <h2>Issued certificates ({issued.length})</h2>
             {issued.length > 0 ? (
               issued.map((c) => (
-                <div key={c.id} className="feedback">
-                  <strong>{c.participantName}</strong>
-                  <p>
-                    {c.workshopName}
-                    <br />
-                    <Link
-                      className="text-link"
-                      to={`/certificate/${c.certificateCode}`}
-                    >
-                      {c.certificateCode}
-                    </Link>
-                  </p>
+                <div key={c.id} className="feedback notification-row">
+                  <div>
+                    <strong>{c.participantName}</strong>
+                    <p style={{ margin: '4px 0 0', fontSize: 13 }}>
+                      {c.workshopName}
+                      <br />
+                      <Link
+                        className="text-link"
+                        to={`/certificate/${c.certificateCode}`}
+                      >
+                        {c.certificateCode}
+                      </Link>{' '}
+                      · {new Date(c.issuedAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn tertiary"
+                    style={{ height: 34, padding: '0 12px', fontSize: 12 }}
+                    onClick={() =>
+                      downloadCertificatePdf({
+                        participantName: c.participantName || c.email || 'Participant',
+                        workshopName: c.workshopName,
+                        certificateCode: c.certificateCode,
+                        issuedAt: c.issuedAt
+                      })
+                    }
+                  >
+                    Download PDF
+                  </button>
                 </div>
               ))
             ) : (
-              <p className="muted">No certificates issued.</p>
+              <p className="muted">No certificates issued yet.</p>
             )}
           </div>
         </div>

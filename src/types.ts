@@ -1,6 +1,7 @@
 export type GenderOption = 'Female' | 'Male' | 'Other' | 'Prefer not to say';
 export type WorkshopStatus = 'open' | 'closed' | 'cancelled';
 export type AttendanceStatus = 'present' | 'absent';
+export type WaitlistStatus = 'waiting' | 'notified' | 'confirmed' | 'cancelled';
 
 export const BLUEPRINT_LIMITS = {
   fullNameMin: 2,
@@ -35,6 +36,7 @@ export interface Workshop {
   startTime: string;
   capacity: number;
   registeredCount: number;
+  waitlistCount?: number;
   location: string;
   status: WorkshopStatus;
   createdAt?: string;
@@ -69,7 +71,33 @@ export interface Registration {
   workshopId: number;
   workshopName: string;
   status: 'confirmed' | 'cancelled';
+  checkinToken?: string | null;
   registeredAt: string;
+}
+
+export interface WaitlistEntry {
+  id: number;
+  userUid?: string;
+  workshopId: number;
+  workshopName: string;
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  status: WaitlistStatus;
+  position?: number | null;
+  notifiedAt?: string | null;
+  createdAt: string;
+}
+
+export interface NotificationRecord {
+  id: number;
+  userUid: string;
+  workshopId: number | null;
+  type: string;
+  title: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
 }
 
 export interface AttendanceRecord {
@@ -101,3 +129,130 @@ export interface CertificateRecord {
   certificateCode: string;
   issuedAt: string;
 }
+
+export interface WorkshopAnalyticsItem {
+  id: number;
+  name: string;
+  category: string;
+  status: WorkshopStatus;
+  workshopDate: string;
+  capacity: number;
+  registeredCount: number;
+  waitlistCount: number;
+  fillRate: number;
+  presentCount: number;
+  absentCount: number;
+  certifiedCount: number;
+  completionRate: number;
+}
+
+export interface CategoryStat {
+  category: string;
+  workshops: number;
+  registrations: number;
+  certified: number;
+}
+
+export interface AdminAnalyticsSummary {
+  totalParticipants: number;
+  totalWorkshops: number;
+  totalRegistrations: number;
+  totalWaitlisted: number;
+  presentCount: number;
+  absentCount: number;
+  attendanceRate: number;
+  totalCertificates: number;
+  popularWorkshops: WorkshopAnalyticsItem[];
+  categoryStats: CategoryStat[];
+}
+
+export type TrainingMode = 'Online' | 'Offline' | 'Hybrid';
+
+export interface CourseCategory {
+  id: number;
+  slug: string;
+  name: string;
+  iconKey: string;
+  description: string;
+  displayOrder: number;
+  institutionCount: number;
+}
+
+export interface InstitutionLocationRecord {
+  id: number;
+  institutionId: number;
+  address: string;
+  city: string;
+  area: string;
+  latitude: number | null;
+  longitude: number | null;
+  googleMapsUrl: string;
+  isPrimary: boolean;
+}
+
+export interface InstitutionCourseOffering {
+  id: number;
+  institutionId: number;
+  courseId: number;
+  courseSlug: string;
+  courseName: string;
+  duration: string;
+  trainingMode: string | null;
+}
+
+export interface TrainingInstitution {
+  id: number;
+  name: string;
+  logoUrl: string;
+  imageUrl: string;
+  phone: string;
+  website: string;
+  trainingMode: TrainingMode;
+  description: string;
+  isVerified: boolean;
+  placeId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  locations: InstitutionLocationRecord[];
+  courses: InstitutionCourseOffering[];
+  distanceKm?: number | null;
+}
+
+export interface InstitutionCourseInput {
+  courseId: number;
+  duration: string;
+  trainingMode?: TrainingMode | null;
+}
+
+export interface InstitutionInputPayload {
+  name: string;
+  logoUrl?: string;
+  imageUrl?: string;
+  phone?: string;
+  website?: string;
+  trainingMode: TrainingMode;
+  description: string;
+  isVerified?: boolean;
+  placeId?: string | null;
+  address: string;
+  city: string;
+  area?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  googleMapsUrl?: string;
+  courses: InstitutionCourseInput[];
+}
+
+export interface VerifiedPlaceCandidate {
+  placeId: string;
+  name: string;
+  formattedAddress: string;
+  city: string;
+  area: string;
+  phone: string;
+  website: string;
+  latitude: number | null;
+  longitude: number | null;
+  googleMapsUrl: string;
+}
+

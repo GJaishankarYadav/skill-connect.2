@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useFirebase } from '../context/FirebaseContext';
 import {
   BLUEPRINT_LIMITS,
+  type WaitlistEntry,
   type Workshop,
   type WorkshopStatus
 } from '../types';
@@ -12,6 +13,12 @@ export function AdminWorkshopsPage() {
     useFirebase();
 
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
+  const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
+  const [capacityDraft, setCapacityDraft] = useState<Record<number, string>>(
+    {}
+  );
+  const [waitlistFilter, setWaitlistFilter] = useState('all');
+
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
   const [duration, setDuration] = useState('');
@@ -21,6 +28,7 @@ export function AdminWorkshopsPage() {
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -28,8 +36,17 @@ export function AdminWorkshopsPage() {
     try {
       const res = await authFetch('/api/admin/overview');
       if (!res.ok) throw new Error('Unable to load workshops.');
-      const data = (await res.json()) as { workshops: Workshop[] };
+      const data = (await res.json()) as {
+        workshops: Workshop[];
+        waitlist?: WaitlistEntry[];
+      };
       setWorkshops(data.workshops);
+      setWaitlist(data.waitlist || []);
+      const drafts: Record<number, string> = {};
+      for (const w of data.workshops) {
+        drafts[w.id] = String(w.capacity);
+      }
+      setCapacityDraft(drafts);
     } catch (err) {
       setErrorMsg(
         err instanceof Error ? err.message : 'Unable to load workshops.'
@@ -113,25 +130,109 @@ export function AdminWorkshopsPage() {
     }
   };
 
-  const toggleStatus = async (w: Workshop, nextStatus: WorkshopStatus) => {
+  const updateWorkshop = async (
+    w: Workshop,
+    payload: { status?: WorkshopStatus; capacity?: number }
+  ) => {
     setErrorMsg(null);
+    setMessage(null);
+    setBusyAction(`ws-${w.id}`);
     try {
       const res = await authFetch(`/api/admin/workshops/${w.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ status: nextStatus })
+        body: JSON.stringify(payload)
       });
+      const data = (await res.json()) as {
+        error?: string;
+        promotedCount?: number;
+      };
       if (!res.ok) {
-        const data = (await res.json()) as { error?: string };
-        setErrorMsg(data.error || 'Failed to update status.');
+        setErrorMsg(data.error || 'Failed to update workshop.');
         return;
+      }
+      const promoMsg =
+        data.promotedCount && data.promotedCount > 0
+          ? ` Notified ${data.promotedCount} waitlisted participant(s) of open seat(s).`
+          : '';
+      setMessage(`Updated ${w.name}.${promoMsg}`);
+      await loadWorkshops();
+    } catch (err) {
+      setErrorMsg(
+        err instanceof Error ? err.message : 'Failed to update workshop.'
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleNotifyNext = async (w: Workshop) => {
+    setErrorMsg(null);
+    setMessage(null);
+    setBusyAction(`notify-${w.id}`);
+    try {
+      const res = await authFetch(`/api/admin/workshops/${w.id}/notify-waitlist`, {
+        method: 'POST'
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        promotedCount?: number;
+      };
+      if (!res.ok) {
+        setErrorMsg(data.error || 'Failed to notify waitlist.');
+        return;
+      }
+      if (!data.promotedCount) {
+        setErrorMsg('No open seats or waiting participants to notify right now.');
+      } else {
+        setMessage(
+          `Notified ${data.promotedCount} waitlisted participant(s) for ${w.name}.`
+        );
       }
       await loadWorkshops();
     } catch (err) {
       setErrorMsg(
-        err instanceof Error ? err.message : 'Failed to update status.'
+        err instanceof Error ? err.message : 'Failed to notify waitlist.'
       );
+    } finally {
+      setBusyAction(null);
     }
   };
+
+  const handleRemoveWaitlist = async (entryId: number) => {
+    setErrorMsg(null);
+    setMessage(null);
+    setBusyAction(`remove-${entryId}`);
+    try {
+      const res = await authFetch(`/api/admin/waitlist/${entryId}/remove`, {
+        method: 'POST'
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        promotedCount?: number;
+      };
+      if (!res.ok) {
+        setErrorMsg(data.error || 'Failed to remove waitlist entry.');
+        return;
+      }
+      setMessage(
+        data.promotedCount
+          ? 'Removed waitlist entry and notified next person in queue.'
+          : 'Removed waitlist entry.'
+      );
+      await loadWorkshops();
+    } catch (err) {
+      setErrorMsg(
+        err instanceof Error ? err.message : 'Failed to remove waitlist entry.'
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const filteredWaitlist = waitlist.filter(
+    (entry) =>
+      waitlistFilter === 'all' || String(entry.workshopId) === waitlistFilter
+  );
 
   return (
     <section className="section">
@@ -139,18 +240,19 @@ export function AdminWorkshopsPage() {
         <div className="section-heading">
           <div>
             <span className="eyebrow">Administration</span>
-            <h1>Manage workshops</h1>
+            <h1>Manage workshops &amp; waiting lists</h1>
           </div>
           <Link className="btn tertiary" to="/admin">
             Dashboard
           </Link>
         </div>
 
+        {message && <div className="alert success">{message}</div>}
+        {errorMsg && <div className="alert error">{errorMsg}</div>}
+
         <div className="admin-grid">
           <div className="panel">
             <h2>Add workshop</h2>
-            {message && <div className="alert success">{message}</div>}
-            {errorMsg && <div className="alert error">{errorMsg}</div>}
             <form onSubmit={(e) => void handleSubmit(e)}>
               <div className="form-grid">
                 <label>
@@ -245,47 +347,109 @@ export function AdminWorkshopsPage() {
           </div>
 
           <div className="panel">
-            <h2>Workshop list</h2>
+            <h2>Workshop list &amp; seats</h2>
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
                     <th>Workshop</th>
-                    <th>Registered</th>
+                    <th>Seats</th>
+                    <th>Waitlist</th>
                     <th>Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {workshops.map((w) => (
-                    <tr key={w.id}>
-                      <td>
-                        <strong>{w.name}</strong>
-                        <small>{w.workshopDate}</small>
-                      </td>
-                      <td>
-                        {w.registeredCount}/{w.capacity}
-                      </td>
-                      <td>
-                        <select
-                          aria-label={`Status for ${w.name}`}
-                          value={w.status}
-                          onChange={(e) =>
-                            void toggleStatus(
-                              w,
-                              e.target.value as WorkshopStatus
-                            )
-                          }
-                        >
-                          <option value="open">open</option>
-                          <option value="closed">closed</option>
-                          <option value="cancelled">cancelled</option>
-                        </select>
-                      </td>
-                    </tr>
-                  ))}
+                  {workshops.map((w) => {
+                    const draftCap = Number.parseInt(
+                      capacityDraft[w.id] ?? String(w.capacity),
+                      10
+                    );
+                    const capChanged =
+                      !Number.isNaN(draftCap) && draftCap !== w.capacity;
+                    const waitCount = w.waitlistCount ?? 0;
+                    const hasOpenSeat =
+                      w.status === 'open' && w.registeredCount < w.capacity;
+                    return (
+                      <tr key={w.id}>
+                        <td>
+                          <strong>{w.name}</strong>
+                          <small>{w.workshopDate}</small>
+                        </td>
+                        <td className="tabular-nums">
+                          <div className="inline-capacity">
+                            <span>{w.registeredCount}/</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={5000}
+                              aria-label={`Capacity for ${w.name}`}
+                              value={capacityDraft[w.id] ?? String(w.capacity)}
+                              onChange={(e) =>
+                                setCapacityDraft((prev) => ({
+                                  ...prev,
+                                  [w.id]: e.target.value
+                                }))
+                              }
+                            />
+                            {capChanged && (
+                              <button
+                                type="button"
+                                className="btn primary"
+                                style={{
+                                  height: 30,
+                                  padding: '0 8px',
+                                  fontSize: 11
+                                }}
+                                disabled={busyAction === `ws-${w.id}`}
+                                onClick={() =>
+                                  void updateWorkshop(w, { capacity: draftCap })
+                                }
+                              >
+                                Save
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                        <td className="tabular-nums">
+                          <strong>{waitCount}</strong>
+                          {waitCount > 0 && hasOpenSeat && (
+                            <button
+                              type="button"
+                              className="btn secondary"
+                              style={{
+                                height: 28,
+                                padding: '0 8px',
+                                fontSize: 11,
+                                marginTop: 4
+                              }}
+                              disabled={busyAction === `notify-${w.id}`}
+                              onClick={() => void handleNotifyNext(w)}
+                            >
+                              Notify Next
+                            </button>
+                          )}
+                        </td>
+                        <td>
+                          <select
+                            aria-label={`Status for ${w.name}`}
+                            value={w.status}
+                            onChange={(e) =>
+                              void updateWorkshop(w, {
+                                status: e.target.value as WorkshopStatus
+                              })
+                            }
+                          >
+                            <option value="open">open</option>
+                            <option value="closed">closed</option>
+                            <option value="cancelled">cancelled</option>
+                          </select>
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {workshops.length === 0 && (
                     <tr>
-                      <td colSpan={3} className="muted">
+                      <td colSpan={4} className="muted">
                         No workshops yet.
                       </td>
                     </tr>
@@ -293,6 +457,93 @@ export function AdminWorkshopsPage() {
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+
+        {/* Waiting List Queue Panel */}
+        <div className="panel" style={{ marginTop: 24 }}>
+          <div className="section-heading" style={{ marginBottom: 14 }}>
+            <div>
+              <span className="eyebrow">Queue Management</span>
+              <h2 style={{ margin: 0, fontSize: 22 }}>
+                Waiting List Participants
+              </h2>
+            </div>
+            <select
+              aria-label="Filter waiting list by workshop"
+              style={{ width: 'auto', minWidth: 220 }}
+              value={waitlistFilter}
+              onChange={(e) => setWaitlistFilter(e.target.value)}
+            >
+              <option value="all">All workshops ({waitlist.length})</option>
+              {workshops.map((w) => (
+                <option key={w.id} value={String(w.id)}>
+                  {w.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Participant</th>
+                  <th>Workshop</th>
+                  <th>Status</th>
+                  <th>Joined</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredWaitlist.length > 0 ? (
+                  filteredWaitlist.map((entry) => (
+                    <tr key={entry.id}>
+                      <td>
+                        <strong>{entry.fullName}</strong>
+                        <small>
+                          {entry.email}
+                          {entry.phone ? ` · ${entry.phone}` : ''}
+                        </small>
+                      </td>
+                      <td>{entry.workshopName}</td>
+                      <td>
+                        <strong>{entry.status}</strong>
+                        {entry.notifiedAt && (
+                          <small>
+                            Notified{' '}
+                            {new Date(entry.notifiedAt).toLocaleDateString()}
+                          </small>
+                        )}
+                      </td>
+                      <td className="tabular-nums">
+                        {new Date(entry.createdAt).toLocaleDateString()}
+                      </td>
+                      <td>
+                        {['waiting', 'notified'].includes(entry.status) ? (
+                          <button
+                            type="button"
+                            className="btn danger"
+                            disabled={busyAction === `remove-${entry.id}`}
+                            onClick={() => void handleRemoveWaitlist(entry.id)}
+                          >
+                            Remove
+                          </button>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={5} className="muted">
+                      No waiting list entries found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

@@ -12,10 +12,13 @@ interface QrSessionInfo {
 
 export function QrAttendancePage() {
   const { token = '' } = useParams();
-  const { user, authReady, signInWithGoogle, authFetch } = useFirebase();
+  const { user, authReady, signInWithGoogle, refreshProfile, authFetch } =
+    useFirebase();
 
   const [sessionInfo, setSessionInfo] = useState<QrSessionInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [certificateCode, setCertificateCode] = useState<string | null>(null);
+  const [wasDuplicate, setWasDuplicate] = useState(false);
   const [status, setStatus] = useState<
     'idle' | 'submitting' | 'marked' | 'not-registered' | 'invalid'
   >('idle');
@@ -54,7 +57,11 @@ export function QrAttendancePage() {
       const res = await authFetch(`/api/qr/${encodeURIComponent(token)}`, {
         method: 'POST'
       });
-      const data = (await res.json()) as { code?: string };
+      const data = (await res.json()) as {
+        code?: string;
+        certificateCode?: string;
+        duplicate?: boolean;
+      };
       if (res.status === 403 && data.code === 'not-registered') {
         setStatus('not-registered');
         return;
@@ -63,7 +70,10 @@ export function QrAttendancePage() {
         setStatus('invalid');
         return;
       }
+      setCertificateCode(data.certificateCode || null);
+      setWasDuplicate(Boolean(data.duplicate));
       setStatus('marked');
+      await refreshProfile();
     } catch {
       setStatus('invalid');
     }
@@ -118,16 +128,36 @@ export function QrAttendancePage() {
             </>
           ) : status === 'marked' ? (
             <>
-              <span className="eyebrow">Verified</span>
-              <h1>Attendance marked</h1>
+              <span className="eyebrow">
+                {wasDuplicate ? 'Already Recorded' : 'Verified'}
+              </span>
+              <h1>
+                {wasDuplicate
+                  ? 'Attendance already recorded'
+                  : 'Attendance marked'}
+              </h1>
               <p>
-                Thank you! Your presence for{' '}
-                <strong>{sessionInfo.workshopName}</strong> was recorded
-                securely.
+                {wasDuplicate
+                  ? 'Your attendance for '
+                  : 'Thank you! Your presence for '}
+                <strong>{sessionInfo.workshopName}</strong>{' '}
+                {wasDuplicate
+                  ? 'was already confirmed earlier (duplicate entry prevented).'
+                  : 'was recorded securely.'}
               </p>
-              <Link className="btn primary" to="/workshops">
-                Back to workshops
-              </Link>
+              <div className="hero-actions">
+                {certificateCode && (
+                  <Link
+                    className="btn primary"
+                    to={`/certificate/${certificateCode}`}
+                  >
+                    Download Certificate ({certificateCode})
+                  </Link>
+                )}
+                <Link className="btn tertiary" to="/workshops">
+                  Back to workshops
+                </Link>
+              </div>
             </>
           ) : (
             <>

@@ -1,5 +1,7 @@
 import { relations } from 'drizzle-orm';
 import {
+  boolean,
+  doublePrecision,
   integer,
   pgTable,
   serial,
@@ -80,6 +82,7 @@ export const registrations = pgTable(
       .references(() => workshops.id, { onDelete: 'cascade' })
       .notNull(),
     status: text('status').notNull().default('confirmed'),
+    checkinToken: text('checkin_token').unique(),
     registeredAt: timestamp('registered_at').defaultNow().notNull()
   },
   (table) => [
@@ -89,6 +92,50 @@ export const registrations = pgTable(
     )
   ]
 );
+
+export const waitlist = pgTable(
+  'waitlist',
+  {
+    id: serial('id').primaryKey(),
+    userUid: text('user_uid')
+      .references(() => users.uid, { onDelete: 'cascade' })
+      .notNull(),
+    workshopId: integer('workshop_id')
+      .references(() => workshops.id, { onDelete: 'cascade' })
+      .notNull(),
+    fullName: text('full_name').notNull(),
+    age: integer('age').notNull(),
+    gender: text('gender').notNull(),
+    phone: text('phone').notNull(),
+    email: text('email').notNull(),
+    address: text('address').notNull(),
+    status: text('status').notNull().default('waiting'),
+    notifiedAt: timestamp('notified_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  (table) => [
+    uniqueIndex('waitlist_user_workshop_idx').on(
+      table.userUid,
+      table.workshopId
+    )
+  ]
+);
+
+export const notifications = pgTable('notifications', {
+  id: serial('id').primaryKey(),
+  userUid: text('user_uid')
+    .references(() => users.uid, { onDelete: 'cascade' })
+    .notNull(),
+  workshopId: integer('workshop_id').references(() => workshops.id, {
+    onDelete: 'cascade'
+  }),
+  type: text('type').notNull().default('waitlist_seat'),
+  title: text('title').notNull(),
+  message: text('message').notNull(),
+  isRead: boolean('is_read').notNull().default(false),
+  createdAt: timestamp('created_at').defaultNow().notNull()
+});
 
 export const attendance = pgTable(
   'attendance',
@@ -189,3 +236,97 @@ export const registrationsRelations = relations(
     attendance: many(attendance)
   })
 );
+
+export const courses = pgTable('courses', {
+  id: serial('id').primaryKey(),
+  slug: text('slug').notNull().unique(),
+  name: text('name').notNull(),
+  iconKey: text('icon_key').notNull().default('book'),
+  description: text('description').notNull().default(''),
+  displayOrder: integer('display_order').notNull().default(0),
+  createdAt: timestamp('created_at').defaultNow().notNull()
+});
+
+export const institutions = pgTable('institutions', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  logoUrl: text('logo_url').notNull().default(''),
+  imageUrl: text('image_url').notNull().default(''),
+  phone: text('phone').notNull().default(''),
+  website: text('website').notNull().default(''),
+  trainingMode: text('training_mode').notNull().default('Offline'),
+  description: text('description').notNull().default(''),
+  isVerified: boolean('is_verified').notNull().default(false),
+  placeId: text('place_id'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull()
+});
+
+export const institutionLocations = pgTable('institution_locations', {
+  id: serial('id').primaryKey(),
+  institutionId: integer('institution_id')
+    .references(() => institutions.id, { onDelete: 'cascade' })
+    .notNull(),
+  address: text('address').notNull(),
+  city: text('city').notNull(),
+  area: text('area').notNull().default(''),
+  latitude: doublePrecision('latitude'),
+  longitude: doublePrecision('longitude'),
+  googleMapsUrl: text('google_maps_url').notNull().default(''),
+  isPrimary: boolean('is_primary').notNull().default(true)
+});
+
+export const institutionCourses = pgTable(
+  'institution_courses',
+  {
+    id: serial('id').primaryKey(),
+    institutionId: integer('institution_id')
+      .references(() => institutions.id, { onDelete: 'cascade' })
+      .notNull(),
+    courseId: integer('course_id')
+      .references(() => courses.id, { onDelete: 'cascade' })
+      .notNull(),
+    duration: text('duration').notNull().default(''),
+    trainingMode: text('training_mode')
+  },
+  (table) => [
+    uniqueIndex('institution_courses_inst_course_idx').on(
+      table.institutionId,
+      table.courseId
+    )
+  ]
+);
+
+export const coursesRelations = relations(courses, ({ many }) => ({
+  institutionCourses: many(institutionCourses)
+}));
+
+export const institutionsRelations = relations(institutions, ({ many }) => ({
+  locations: many(institutionLocations),
+  institutionCourses: many(institutionCourses)
+}));
+
+export const institutionLocationsRelations = relations(
+  institutionLocations,
+  ({ one }) => ({
+    institution: one(institutions, {
+      fields: [institutionLocations.institutionId],
+      references: [institutions.id]
+    })
+  })
+);
+
+export const institutionCoursesRelations = relations(
+  institutionCourses,
+  ({ one }) => ({
+    institution: one(institutions, {
+      fields: [institutionCourses.institutionId],
+      references: [institutions.id]
+    }),
+    course: one(courses, {
+      fields: [institutionCourses.courseId],
+      references: [courses.id]
+    })
+  })
+);
+

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { WorkshopCard } from '../components/WorkshopCard';
 import type { Workshop } from '../types';
 
@@ -63,6 +64,9 @@ export function WorkshopsPage() {
             <span className="eyebrow">Community courses</span>
             <h1>Find your next skill</h1>
           </div>
+          <Link className="btn secondary" to="/institutions">
+            Find Training Institutions
+          </Link>
         </div>
 
         <form className="filters" onSubmit={(e) => e.preventDefault()}>

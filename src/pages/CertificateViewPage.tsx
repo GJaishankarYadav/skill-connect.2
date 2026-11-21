@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import type { CertificateRecord } from '../types';
+import { downloadCertificatePdf } from '../utils/certificatePdf';
 
 export function CertificateViewPage() {
   const { code = '' } = useParams();
@@ -44,13 +45,30 @@ export function CertificateViewPage() {
                 {cert.certificateCode}
               </p>
             </div>
-            <button
-              type="button"
-              className="btn primary full"
-              onClick={() => window.print()}
-            >
-              Download / Print PDF
-            </button>
+            <div className="hero-actions no-print">
+              <button
+                type="button"
+                className="btn primary"
+                style={{ flex: 1 }}
+                onClick={() =>
+                  downloadCertificatePdf({
+                    participantName: cert.participantName || 'Participant',
+                    workshopName: cert.workshopName,
+                    certificateCode: cert.certificateCode,
+                    issuedAt: cert.issuedAt
+                  })
+                }
+              >
+                Download Certificate PDF
+              </button>
+              <button
+                type="button"
+                className="btn tertiary"
+                onClick={() => window.print()}
+              >
+                Print View
+              </button>
+            </div>
           </>
         ) : (
           <div className="form-card">
