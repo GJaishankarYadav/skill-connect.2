@@ -1,0 +1,45 @@
+databases:
+  - name: skillconnect-db
+    databaseName: skillconnect
+    user: skillconnect
+    plan: free
+
+services:
+  - type: web
+    name: skillconnect
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:render
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SQL_HOST
+        fromDatabase:
+          name: skillconnect-db
+          property: host
+      - key: SQL_DB_NAME
+        fromDatabase:
+          name: skillconnect-db
+          property: database
+      - key: SQL_USER
+        fromDatabase:
+          name: skillconnect-db
+          property: user
+      - key: SQL_PASSWORD
+        fromDatabase:
+          name: skillconnect-db
+          property: password
+      - key: SQL_ADMIN_USER
+        fromDatabase:
+          name: skillconnect-db
+          property: user
+      - key: SQL_ADMIN_PASSWORD
+        fromDatabase:
+          name: skillconnect-db
+          property: password
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: VITE_GOOGLE_MAPS_API_KEY
+        sync: false

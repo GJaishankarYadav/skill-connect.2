@@ -1,82 +1,54 @@
 # SkillConnect
 
-Complete community workshop registration and administration application built with HTML, CSS, JavaScript, PHP and MySQL.
+SkillConnect is a React/Vite frontend with an Express API, PostgreSQL data storage,
+and Firebase Authentication.
 
-## Features
+## Deploy to Render
 
-- Public workshop listing, search and category filters
-- Participant registration with duplicate and capacity protection
-- Session-based administrator authentication
-- Workshop CRUD and participant roster
-- Attendance management and duplicate-safe attendance records
-- QR attendance backed by server-side token and registration validation
-- Certificate issuance and printable/PDF certificate view
-- Star rating feedback
-- Registration and attendance dashboard metrics
-- CSV report export compatible with Excel
-- Responsive green and white interface
+1. Push this repository to GitHub and select **New → Blueprint** in Render.
+2. Connect the repository and let Render apply [`render.yaml`](./render.yaml).
+   The Blueprint creates a web service and PostgreSQL database.
+3. Optionally enter `GOOGLE_MAPS_API_KEY` and `VITE_GOOGLE_MAPS_API_KEY` when
+   prompted. Maps remain optional; restrict the Google Maps key to your app's
+   domains and required APIs.
+4. Add the deployed Render hostname to the authorized domains in Firebase
+   Authentication. The app uses the Firebase project configured in
+   `firebase-applet-config.json`.
+5. Visit the service's `/api/health` endpoint to confirm it is healthy.
 
-## Run locally with npm
+The Render start command applies the Drizzle schema to PostgreSQL before starting
+the app. The platform owner account is currently `skillconnect751@gmail.com`;
+sign in with that verified Firebase account to manage administrator access.
 
-The host environment can run the complete demo through Node and SQLite:
+The Blueprint uses free plans for both services. Render's free web service can
+spin down when idle, and free PostgreSQL databases are temporary; use a paid
+database plan for persistent production data.
+
+## Run locally
+
+Requirements: Node.js 22.12 or newer and a PostgreSQL database.
 
 ```bash
-cd /path/to/club
-npm install
-npm start
+npm ci
+cp .env.example .env
+# Fill in the PostgreSQL connection values in .env.
+npm run db:push
+npm run dev
 ```
 
-Open `http://localhost:8080`.
+Open `http://localhost:3000`. To create a production build, run `npm run build`;
+`npm start` serves that build when `dist/` exists and `NODE_ENV=production`.
 
-The npm runtime creates `database/skillconnect.sqlite` automatically and seeds four workshops. Stop it with `Ctrl+C`.
+## Configuration
 
-## Run locally with XAMPP
+- `SQL_HOST`, `SQL_DB_NAME`, `SQL_USER`, and `SQL_PASSWORD` configure the app's
+  PostgreSQL connection.
+- `SQL_ADMIN_USER` and `SQL_ADMIN_PASSWORD` are used by Drizzle Kit when applying
+  the schema. The Render Blueprint maps these to the provisioned database user.
+- `GOOGLE_MAPS_API_KEY` enables server-side map lookups, and
+  `VITE_GOOGLE_MAPS_API_KEY` enables the map UI. Both are optional.
+- Firebase client settings are read from `firebase-applet-config.json`. Firebase
+  Authentication must allow the deployed hostname.
 
-1. Install XAMPP and start Apache and MySQL.
-2. Copy this project folder into `htdocs`, for example:
-   `/Applications/XAMPP/xamppfiles/htdocs/club`.
-3. Open phpMyAdmin at `http://localhost/phpmyadmin`.
-4. Import `database/skillconnect.sql`.
-5. Open `http://localhost/club/`.
-
-## Database credentials
-
-The default PDO settings are:
-
-- Host: `127.0.0.1`
-- Database: `skillconnect`
-- User: `root`
-- Password: empty
-
-For another environment, set `DB_HOST`, `DB_NAME`, `DB_USER` and `DB_PASS` variables before starting Apache, or update `includes/config.php`.
-
-## First admin login
-
-The application automatically creates the first administrator in the database:
-
-- Email: `admin@skillconnect.org`
-- Password: `admin123`
-
-Change this password after the demonstration. Passwords are stored using PHP `password_hash()` and verified with `password_verify()`.
-
-## Main URLs
-
-- Home: `index.php`
-- Workshops: `index.php?page=workshops`
-- Registration: `index.php?page=register`
-- Admin: `index.php?page=admin`
-- Attendance: `index.php?page=attendance`
-- Feedback: `index.php?page=feedback`
-- Reports: `index.php?page=reports`
-
-## QR attendance
-
-Open the Attendance page as an administrator and select a workshop session. The generated QR encodes a server-validated 64-character token. A participant enters the email used during registration. The server verifies the participant's workshop registration and uses an attendance unique key to prevent duplicate records.
-
-## Certificates
-
-Open Dashboard → Issue certificates. Certificate eligibility requires at least one recorded “present” attendance for the selected participant and workshop. The certificate code can be opened in `index.php?page=certificate&code=CODE`. Use the browser print dialog and “Save as PDF” for PDF download.
-
-## Security
-
-This project uses PDO prepared statements, CSRF tokens, output escaping, password hashing, session authentication, server-side form validation, capacity locking/transactions, and duplicate constraints. Run it over HTTPS in production and keep XAMPP and PHP updated.
+The repository also contains legacy PHP/MySQL files, which are not used by the
+React/Express application deployed by the Render Blueprint.
