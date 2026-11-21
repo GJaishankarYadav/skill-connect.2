@@ -1,0 +1,343 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Reusable Hardened Primitives
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidCompositeId(id) {
+      return id is string && id.size() > 0 && id.size() <= 260 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isVerifiedUser() && request.auth.uid == userId;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'shankargopana@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() ||
+        (isVerifiedUser() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    // 3. Entity Validation Blueprints
+    function isValidAdmin(data) {
+      return data.keys().hasAll(['uid', 'name', 'email', 'role', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'name', 'email', 'role', 'createdAt']) &&
+        isValidId(data.uid) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+        data.role == 'admin' &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidUserPii(data, userId) {
+      return data.keys().hasAll(['userId', 'fullName', 'age', 'gender', 'phone', 'email', 'address', 'updatedAt']) &&
+        data.keys().hasOnly(['userId', 'fullName', 'age', 'gender', 'phone', 'email', 'address', 'updatedAt']) &&
+        isValidId(data.userId) &&
+        data.userId == userId &&
+        data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 120 &&
+        data.age is int && data.age >= 10 && data.age <= 100 &&
+        data.gender in ['Female', 'Male', 'Other', 'Prefer not to say'] &&
+        data.phone is string && data.phone.size() >= 5 && data.phone.size() <= 32 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+        data.address is string && data.address.size() >= 3 && data.address.size() <= 300 &&
+        data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+
+    function isValidWorkshop(data) {
+      return data.keys().hasAll([
+          'name', 'category', 'description', 'duration', 'workshopDate',
+          'startTime', 'capacity', 'registeredCount', 'location', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'name', 'category', 'description', 'duration', 'workshopDate',
+          'startTime', 'capacity', 'registeredCount', 'location', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 140 &&
+        data.category is string && data.category.size() >= 2 && data.category.size() <= 80 &&
+        data.description is string && data.description.size() >= 5 && data.description.size() <= 1000 &&
+        data.duration is string && data.duration.size() >= 1 && data.duration.size() <= 60 &&
+        data.workshopDate is string && data.workshopDate.size() == 10 && data.workshopDate.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+        data.startTime is string && data.startTime.size() == 5 && data.startTime.matches('^\\d{2}:\\d{2}$') &&
+        data.capacity is int && data.capacity >= 1 && data.capacity <= 5000 &&
+        data.registeredCount is int && data.registeredCount >= 0 && data.registeredCount <= data.capacity &&
+        data.location is string && data.location.size() >= 2 && data.location.size() <= 160 &&
+        data.status in ['open', 'closed', 'cancelled'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSession(data) {
+      return data.keys().hasAll(['workshopId', 'workshopName', 'sessionDate', 'startTime', 'qrToken', 'createdAt']) &&
+        data.keys().hasOnly(['workshopId', 'workshopName', 'sessionDate', 'startTime', 'qrToken', 'createdAt']) &&
+        isValidId(data.workshopId) &&
+        data.workshopName is string && data.workshopName.size() >= 2 && data.workshopName.size() <= 140 &&
+        data.sessionDate is string && data.sessionDate.size() == 10 && data.sessionDate.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+        data.startTime is string && data.startTime.size() == 5 && data.startTime.matches('^\\d{2}:\\d{2}$') &&
+        data.qrToken is string && data.qrToken.size() >= 16 && data.qrToken.size() <= 128 && data.qrToken.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.createdAt is timestamp && data.createdAt == request.time;
+    }
+
+    function isValidQrToken(data, token) {
+      return data.keys().hasAll(['workshopId', 'sessionId', 'workshopName', 'sessionDate', 'startTime', 'createdAt']) &&
+        data.keys().hasOnly(['workshopId', 'sessionId', 'workshopName', 'sessionDate', 'startTime', 'createdAt']) &&
+        isValidId(token) && token.size() >= 16 &&
+        isValidId(data.workshopId) &&
+        isValidId(data.sessionId) &&
+        data.workshopName is string && data.workshopName.size() >= 2 && data.workshopName.size() <= 140 &&
+        data.sessionDate is string && data.sessionDate.size() == 10 && data.sessionDate.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+        data.startTime is string && data.startTime.size() == 5 && data.startTime.matches('^\\d{2}:\\d{2}$') &&
+        data.createdAt is timestamp && data.createdAt == request.time;
+    }
+
+    function isValidRegistration(data) {
+      return data.keys().hasAll(['userId', 'participantName', 'workshopId', 'workshopName', 'status', 'registeredAt']) &&
+        data.keys().hasOnly(['userId', 'participantName', 'workshopId', 'workshopName', 'status', 'registeredAt']) &&
+        isValidId(data.userId) &&
+        data.participantName is string && data.participantName.size() >= 2 && data.participantName.size() <= 120 &&
+        isValidId(data.workshopId) &&
+        data.workshopName is string && data.workshopName.size() >= 2 && data.workshopName.size() <= 140 &&
+        data.status in ['confirmed', 'cancelled'] &&
+        data.registeredAt is timestamp;
+    }
+
+    function isValidAttendance(data) {
+      return data.keys().hasAll(['userId', 'participantName', 'workshopId', 'sessionId', 'registrationId', 'status', 'markedAt']) &&
+        data.keys().hasOnly(['userId', 'participantName', 'workshopId', 'sessionId', 'registrationId', 'status', 'qrToken', 'markedAt']) &&
+        isValidId(data.userId) &&
+        data.participantName is string && data.participantName.size() >= 2 && data.participantName.size() <= 120 &&
+        isValidId(data.workshopId) &&
+        isValidId(data.sessionId) &&
+        isValidCompositeId(data.registrationId) &&
+        data.status in ['present', 'absent'] &&
+        (!('qrToken' in data) || (data.qrToken is string && data.qrToken.size() >= 16 && data.qrToken.size() <= 128 && data.qrToken.matches('^[a-zA-Z0-9_\\-]+$'))) &&
+        data.markedAt is timestamp && data.markedAt == request.time;
+    }
+
+    function isValidFeedback(data) {
+      return data.keys().hasAll(['userId', 'authorName', 'workshopId', 'workshopName', 'rating', 'comments', 'isPublic', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['userId', 'authorName', 'workshopId', 'workshopName', 'rating', 'comments', 'isPublic', 'createdAt', 'updatedAt']) &&
+        isValidId(data.userId) &&
+        data.authorName is string && data.authorName.size() >= 2 && data.authorName.size() <= 120 &&
+        isValidId(data.workshopId) &&
+        data.workshopName is string && data.workshopName.size() >= 2 && data.workshopName.size() <= 140 &&
+        data.rating is int && data.rating >= 1 && data.rating <= 5 &&
+        data.comments is string && data.comments.size() <= 1000 &&
+        data.isPublic == true &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCertificate(data, certificateCode) {
+      return data.keys().hasAll(['userId', 'participantName', 'workshopId', 'workshopName', 'certificateCode', 'issuedAt']) &&
+        data.keys().hasOnly(['userId', 'participantName', 'workshopId', 'workshopName', 'certificateCode', 'issuedAt']) &&
+        isValidId(data.userId) &&
+        data.participantName is string && data.participantName.size() >= 2 && data.participantName.size() <= 120 &&
+        isValidId(data.workshopId) &&
+        data.workshopName is string && data.workshopName.size() >= 2 && data.workshopName.size() <= 140 &&
+        data.certificateCode is string && data.certificateCode == certificateCode &&
+        data.certificateCode.size() >= 5 && data.certificateCode.size() <= 32 &&
+        data.certificateCode.matches('^SC-[A-Z0-9]+$') &&
+        data.issuedAt is timestamp && data.issuedAt == request.time;
+    }
+
+    // 4. Collection Rules
+
+    // Connection check endpoint
+    match /test/{docId} {
+      allow get: if docId == 'connection';
+      allow list, write: if false;
+    }
+
+    // Admins registry (only bootstrapped or existing admins can manage)
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && (isOwner(adminId) || isAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(adminId) && isAdmin() && isValidAdmin(incoming()) &&
+        incoming().uid == adminId && incoming().createdAt == request.time;
+      allow update: if isValidId(adminId) && isAdmin() && isValidAdmin(incoming()) &&
+        incoming().uid == existing().uid && incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'email']);
+      allow delete: if isValidId(adminId) && isBootstrappedAdmin();
+    }
+
+    // Isolated Participant PII
+    match /users/{userId}/private/{docId} {
+      allow get: if isValidId(userId) && docId == 'pii' && (isOwner(userId) || isAdmin());
+      allow list: if isVerifiedUser() && (resource.data.userId == request.auth.uid || isBootstrappedAdmin());
+      allow create, update: if isValidId(userId) && docId == 'pii' && isOwner(userId) &&
+        isValidUserPii(incoming(), userId);
+      allow delete: if false;
+    }
+
+    // Public Workshops Catalog
+    match /workshops/{workshopId} {
+      allow get: if isValidId(workshopId) && (existing().status in ['open', 'closed'] || isAdmin());
+      allow list: if resource.data.status in ['open', 'closed'] || isBootstrappedAdmin();
+      allow create: if isValidId(workshopId) && isAdmin() && isValidWorkshop(incoming()) &&
+        incoming().registeredCount == 0 &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(workshopId) && isValidWorkshop(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          // Tier 1: Admin management
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'category', 'description', 'duration', 'workshopDate',
+            'startTime', 'capacity', 'location', 'status', 'updatedAt'
+          ])) ||
+          // Tier 2: Atomic participant registration increment
+          (isVerifiedUser() &&
+            existing().status == 'open' &&
+            existing().registeredCount < existing().capacity &&
+            incoming().registeredCount == existing().registeredCount + 1 &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['registeredCount', 'updatedAt']) &&
+            existsAfter(/databases/$(database)/documents/registrations/$(request.auth.uid + '_' + workshopId)))
+        );
+      allow delete: if isValidId(workshopId) && isAdmin();
+    }
+
+    // Admin-Managed Sessions (holds all QR tokens)
+    match /sessions/{sessionId} {
+      allow get: if isValidId(sessionId) && isAdmin();
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(sessionId) && isAdmin() && isValidSession(incoming()) &&
+        existsAfter(/databases/$(database)/documents/workshops/$(incoming().workshopId)) &&
+        existsAfter(/databases/$(database)/documents/qrTokens/$(incoming().qrToken));
+      allow update: if isValidId(sessionId) && isAdmin() && isValidSession(incoming()) &&
+        incoming().workshopId == existing().workshopId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['workshopName', 'sessionDate', 'startTime']);
+      allow delete: if isValidId(sessionId) && isAdmin();
+    }
+
+    // Non-Listable QR Token Lookup
+    match /qrTokens/{token} {
+      allow get: if isValidId(token) && isVerifiedUser();
+      allow list: if false;
+      allow create: if isValidId(token) && isAdmin() && isValidQrToken(incoming(), token) &&
+        existsAfter(/databases/$(database)/documents/sessions/$(incoming().sessionId));
+      allow update, delete: if isValidId(token) && isAdmin();
+    }
+
+    // Participant Registrations (keyed by {userId}_{workshopId})
+    match /registrations/{registrationId} {
+      allow get: if isValidCompositeId(registrationId) && (isOwner(existing().userId) || isAdmin());
+      allow list: if isVerifiedUser() && (resource.data.userId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidCompositeId(registrationId) && isVerifiedUser() &&
+        isValidRegistration(incoming()) &&
+        incoming().userId == request.auth.uid &&
+        registrationId == (request.auth.uid + '_' + incoming().workshopId) &&
+        incoming().status == 'confirmed' &&
+        incoming().registeredAt == request.time &&
+        exists(/databases/$(database)/documents/workshops/$(incoming().workshopId)) &&
+        get(/databases/$(database)/documents/workshops/$(incoming().workshopId)).data.status == 'open' &&
+        getAfter(/databases/$(database)/documents/workshops/$(incoming().workshopId)).data.registeredCount ==
+          get(/databases/$(database)/documents/workshops/$(incoming().workshopId)).data.registeredCount + 1;
+      allow update: if isValidCompositeId(registrationId) && isValidRegistration(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().workshopId == existing().workshopId &&
+        incoming().registeredAt == existing().registeredAt &&
+        existing().status != 'cancelled' && (
+          isAdmin() ||
+          (isOwner(existing().userId) && incoming().status == 'cancelled' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status']))
+        );
+      allow delete: if isValidCompositeId(registrationId) && isAdmin();
+    }
+
+    // Session Attendance (keyed by {userId}_{sessionId})
+    match /attendance/{attendanceId} {
+      allow get: if isValidCompositeId(attendanceId) && (isOwner(existing().userId) || isAdmin());
+      allow list: if isVerifiedUser() && (resource.data.userId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidCompositeId(attendanceId) && isValidAttendance(incoming()) &&
+        attendanceId == (incoming().userId + '_' + incoming().sessionId) &&
+        incoming().registrationId == (incoming().userId + '_' + incoming().workshopId) &&
+        exists(/databases/$(database)/documents/registrations/$(incoming().registrationId)) &&
+        exists(/databases/$(database)/documents/sessions/$(incoming().sessionId)) && (
+          // Tier 1: Admin marks present or absent
+          isAdmin() ||
+          // Tier 2: Registered participant self check-in via valid QR token
+          (isOwner(incoming().userId) &&
+            incoming().status == 'present' &&
+            'qrToken' in incoming() &&
+            exists(/databases/$(database)/documents/qrTokens/$(incoming().qrToken)) &&
+            get(/databases/$(database)/documents/qrTokens/$(incoming().qrToken)).data.sessionId == incoming().sessionId &&
+            get(/databases/$(database)/documents/qrTokens/$(incoming().qrToken)).data.workshopId == incoming().workshopId)
+        );
+      allow update: if isValidCompositeId(attendanceId) && isValidAttendance(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().workshopId == existing().workshopId &&
+        incoming().sessionId == existing().sessionId &&
+        incoming().registrationId == existing().registrationId && (
+          isAdmin() ||
+          (isOwner(existing().userId) &&
+            incoming().status == 'present' &&
+            'qrToken' in incoming() &&
+            exists(/databases/$(database)/documents/qrTokens/$(incoming().qrToken)) &&
+            get(/databases/$(database)/documents/qrTokens/$(incoming().qrToken)).data.sessionId == incoming().sessionId &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'qrToken', 'markedAt']))
+        );
+      allow delete: if isValidCompositeId(attendanceId) && isAdmin();
+    }
+
+    // Workshop Feedback (keyed by {userId}_{workshopId}, non-PII)
+    match /feedback/{feedbackId} {
+      allow get: if isValidCompositeId(feedbackId) && existing().isPublic == true;
+      allow list: if resource.data.isPublic == true;
+      allow create: if isValidCompositeId(feedbackId) && isVerifiedUser() &&
+        isValidFeedback(incoming()) &&
+        incoming().userId == request.auth.uid &&
+        feedbackId == (request.auth.uid + '_' + incoming().workshopId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/workshops/$(incoming().workshopId));
+      allow update: if isValidCompositeId(feedbackId) && isVerifiedUser() &&
+        isValidFeedback(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().workshopId == existing().workshopId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (isOwner(existing().userId) || isAdmin()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['rating', 'comments', 'authorName', 'updatedAt']);
+      allow delete: if isValidCompositeId(feedbackId) && (isOwner(existing().userId) || isAdmin());
+    }
+
+    // Certificates (keyed by certificateCode, verifiable by exact code)
+    match /certificates/{certificateCode} {
+      allow get: if isValidId(certificateCode);
+      allow list: if isVerifiedUser() && (resource.data.userId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidId(certificateCode) && isAdmin() &&
+        isValidCertificate(incoming(), certificateCode) &&
+        exists(/databases/$(database)/documents/registrations/$(incoming().userId + '_' + incoming().workshopId));
+      allow update: if false;
+      allow delete: if isValidId(certificateCode) && isAdmin();
+    }
+  }
+}

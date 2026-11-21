@@ -1,0 +1,2 @@
+document.querySelector('.menu-toggle')?.addEventListener('click',()=>document.querySelector('.navlinks')?.classList.toggle('open'));
+document.querySelectorAll('form').forEach(form=>form.addEventListener('submit',()=>{const submit=form.querySelector('[type="submit"]');if(submit&&!submit.disabled){submit.dataset.originalText=submit.textContent;submit.disabled=true;setTimeout(()=>{submit.disabled=false;submit.textContent=submit.dataset.originalText},1500)}}));
