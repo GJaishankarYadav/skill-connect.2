@@ -45,10 +45,18 @@ Open `http://localhost:3000`. To create a production build, run `npm run build`;
   PostgreSQL connection.
 - `SQL_ADMIN_USER` and `SQL_ADMIN_PASSWORD` are used by Drizzle Kit when applying
   the schema. The Render Blueprint maps these to the provisioned database user.
+- `SQL_PORT` and `SQL_SSL=true` are optional and enable TLS connections to
+  external PostgreSQL hosts such as Supabase (`SQL_PORT=5432` or `6543`).
 - `GOOGLE_MAPS_API_KEY` enables server-side map lookups, and
   `VITE_GOOGLE_MAPS_API_KEY` enables the map UI. Both are optional.
 - Firebase client settings are read from `firebase-applet-config.json`. Firebase
   Authentication must allow the deployed hostname.
+
+## Create Database in Supabase
+
+1. Create a project in [Supabase](https://supabase.com) and open **SQL Editor → New Query**.
+2. Paste and run [`supabase/schema.sql`](./supabase/schema.sql) to create all 15 SkillConnect tables, indexes, foreign keys, and starter courses/workshops.
+3. Alternatively, copy your Supabase Postgres host, port (`5432` or `6543`), database (`postgres`), user, and password into `.env` (`SQL_HOST`, `SQL_PORT`, `SQL_DB_NAME`, `SQL_USER`, `SQL_PASSWORD`, `SQL_ADMIN_USER`, `SQL_ADMIN_PASSWORD`, `SQL_SSL=true`) and run `npm run db:push`.
 
 The repository also contains legacy PHP/MySQL files, which are not used by the
 React/Express application deployed by the Render Blueprint.

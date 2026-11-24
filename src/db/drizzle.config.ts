@@ -21,6 +21,9 @@ if (!password) {
   throw new Error('SQL_ADMIN_PASSWORD must be set in environment variables.');
 }
 
+const port = process.env.SQL_PORT ? Number(process.env.SQL_PORT) : undefined;
+const useSsl = process.env.SQL_SSL === 'true';
+
 console.log(`Using user: ${user} to connect to database.`);
 
 export default defineConfig({
@@ -30,10 +33,11 @@ export default defineConfig({
   schemaFilter: ['public'],
   dbCredentials: {
     host: sqlHost,
+    ...(port && Number.isFinite(port) ? { port } : {}),
     user,
     password,
     database: sqlDbName,
-    ssl: false
+    ssl: useSsl ? { rejectUnauthorized: false } : false
   },
   verbose: true
 });
